@@ -1,6 +1,7 @@
 // Need to be superuser to compile: sudo su 
 // Compile with: g++ -lpthread Assignment1.cpp -o Assignment1
 // If doesn't work, try: g++ -pthread Assignment1.cpp -o Assignment1
+// Run with: ./Assignment1
 
 // This exercise show how to schedule four periodic threads with Rate Monotonic with semaphores 
 // using priority ceiling
@@ -36,9 +37,9 @@ T2T3 -> z22 , z31
 
 Beta*(i) -> is the set of all the critical sections that can block the task(i) 
 Beta*1 = { z21 , z41 }
-Beta*2 = { z31 , z41 }
-Beta*3 = { z41 }
-Beta*4 = { 0 } has lowest priority so it can NOT be blocked
+Beta*2 = { z31 , z41 }  z41 could block for indirect blocking
+Beta*3 = { z41 }		z41 could block for indirect blocking
+Beta*4 = { 0 }          task4 has lowest priority so it can NOT be blocked
 
 Beta(i)(j) is the set of critical sections of task(j) that can block the higher priority task(i)
 Beta12 = { z21 }
@@ -46,6 +47,7 @@ Beta14 = { z41 }
 Beta23 = { z31 }
 Beta24 = { z41 }
 Beta34 = { z41 }
+
 -------------------------------------------------------------------------------------------------------
 */
 
@@ -103,9 +105,9 @@ pthread_mutex_t S23 = PTHREAD_MUTEX_INITIALIZER;
 // Initialization of mutex attribute
 pthread_mutexattr_t mymutexattr;
 
-#define INNERLOOP 1000
-#define OUTERLOOP 100
-#define WATSELOOP 200
+#define INNERLOOP 400
+#define OUTERLOOP 1000
+#define WATSELOOP 800
 
 #define NPERIODICTASKS 4
 #define NAPERIODICTASKS 0
@@ -154,8 +156,7 @@ int main()
 	}
 
   	// Execute all tasks in standalone modality in order to measure execution times
-  	// (using gettimeofday). Use the computed values to update the worst case execution
-  	// time of each task
+  	// Use the computed values to update the worst case execution time of each task
   	for (int i =0; i < NTASKS; i++)
     {
 		// Setting the Worst Case Execution Time as zero for each task
@@ -192,7 +193,7 @@ int main()
 				WCET[i] = compWCET[i];
 			}
 		}
-		printf("\n\n\nWorst Case Execution Time %d=%f \n\n\n", i+1, WCET[i]);
+		printf("\n\nWorst Case Execution Time %d=%f \n\n", i+1, WCET[i]);
     }
 
 	// Get values of the critical sections
@@ -205,12 +206,17 @@ int main()
 	B3 = z31;
 	B4 = 0; // task4 can't be blocked
 	
+	printf("\n\nBlocking Time B1 is: %lf\n", B1);
+	printf("Blocking Time B2 is: %lf\n", B2);
+	printf("Blocking Time B3 is: %lf\n", B3);
+	printf("Blocking Time B4 is: %lf\n", B4);
+	
 	// Compute Ui 
 	// In order to compute the utilization time (U) there is the need to apply the rule used
 	// for Rate Monotonic for each periodic task, using just the tasks which have lower or 
 	// equal priority of the considered one. 
 	// After that, it's needed to add the maximum blocking time (B) for which a task can be 
-	// blocked to the utilization time previously found for each task.
+	// blocked to the utilization time for each task.
 	double U[NTASKS];
 	
 	U[0] = WCET[0]/periods[0] + B1/periods[0];
@@ -221,19 +227,19 @@ int main()
 
 	U[3] = WCET[0]/periods[0] + WCET[1]/periods[1] + WCET[2]/periods[2] + WCET[3]/periods[3];
     	
-	// Compute Ulub for each task and check the sufficient conditions
+	// Compute Ulub for each task 
 	double Ulub[NTASKS];
 	for (int i = 0; i < NTASKS; i++)
 	{
 		// If there are no harmonic relationships between tasks periods, there is the need to use 
-		// the following formula in order to compute Ulub
-		double Ulub[i] = (i+1)*(pow(2.0,(1.0/(i+1))) -1);
+		// the following formula in order to compute Ulub for each task
+		Ulub[i] = (i+1)*(pow(2.0,(1.0/(i+1))) -1);
 	}
 
 
 	// Check the sufficient conditions for each U and Ulub calculated previously: 
 	// if conditions are not satisfied, exit the program
-	// (could have done with a for loop but i kept having problem at printing)
+	// (could have done with a for loop but i kept having problems at printing)
   	if (U[0] > Ulub[0])
     {
       	printf("\n\n\n U[1]=%lf Ulub[1]=%lf Non schedulable Task Set\n", U[0], Ulub[0]);
@@ -267,7 +273,7 @@ int main()
 		fflush(stdout);	
       	return(-1);
     } else {
-  		printf("\n\n\n U[4]=%lf Ulub[4]=%lf Scheduable Task Set\n\n\n", U[3], Ulub[3]);
+  		printf(" U[4]=%lf Ulub[4]=%lf Scheduable Task Set\n\n\n", U[3], Ulub[3]);
   		fflush(stdout);	
 	}
 	sleep(2);
@@ -322,13 +328,14 @@ int main()
     // and comment the lines for the priority inheritance
     // Semaphores S12, S14 and S23 take the priority of the highest priority among 
     // all tasks that can use the semaphore
+	
     pthread_mutexattr_setprotocol(&mymutexattr, PTHREAD_PRIO_PROTECT);
     pthread_mutexattr_setprioceiling(&mymutexattr, parameters[0].sched_priority);
     pthread_mutex_init(&S12, &mymutexattr);
     pthread_mutex_init(&S14, &mymutexattr);
     pthread_mutexattr_setprioceiling(&mymutexattr, parameters[1].sched_priority);
     pthread_mutex_init(&S23, &mymutexattr);
-
+	
 	// Declare the variable to contain the return values of pthread_create	
   	int iret[NTASKS];
 
@@ -383,8 +390,8 @@ void task1_code()
 	// Initialize time_1, time_2, time_3 and time_4 required to read the clock
 	struct timespec time_1, time_2, time_3, time_4;
 	// Print the id of the current task
-  	printf(" 1[ "); fflush(stdout);
-
+  	printf(" 1[ "); 
+	fflush(stdout);
 	// This double loop with random computation is only required to waste time
 	double uno;
   	for (int i = 0; i < OUTERLOOP; i++)
@@ -404,23 +411,27 @@ void task1_code()
 	double due;
 	for (int i = 0; i < WATSELOOP; i++)
 	{
-		due = rand()*rand()%10;
+		//for (int j = 0; j < INNERLOOP; j++) // decomment this line in order to try to create a deadlock <-----
+		//{                                   // decomment this line in order to try to create a deadlock <-----
+			due = rand()*rand()%10;
+    	//}                                   // decomment this line in order to try to create a deadlock <-----
 	}
+	//pthread_mutex_lock(&S14); // decomment this line in order to try to create a deadlock <-----
 	// Task1 writes on T1T2
 	T1T2 = due;
 	printf(" Writing in T1T2 ");
 	fflush(stdout);
-	// pthread_mutex_lock(&S14); // decomment this line in order to try to create a deadlock <-----
 	// Getting the time at the end of the critical zone
 	clock_gettime(CLOCK_REALTIME, &time_2);
+	//pthread_mutex_unlock(&S14); // decomment this line in order to try to create a deadlock <-----
 	// Releasing the semaphore
-	pthread_mutex_unlock(&S12); // comment in order to try to create a deadlock <-----
+	pthread_mutex_unlock(&S12); 
 	// Saving time in the global variable initialized for z11 critical zone
 	z11 = 1000000000*(time_2.tv_sec - time_1.tv_sec)+(time_2.tv_nsec - time_1.tv_nsec);
 
 	// Critical zone z12
 	// Taking the semaphore
-	pthread_mutex_lock(&S14); // comment in order to try to try to create a deadlock <-----
+	pthread_mutex_lock(&S14); 
 	// Getting the time at the beginning of the critical zone
 	clock_gettime(CLOCK_REALTIME, &time_3);
 	// Waste time inside the critical zone
@@ -437,7 +448,6 @@ void task1_code()
 	clock_gettime(CLOCK_REALTIME, &time_4);
 	// Releasing the semaphore
 	pthread_mutex_unlock(&S14);
-	// pthread_mutex_unlock(&S12); // decomment this line in order to try to create a deadlock <-----
 	// Saving time in the global variable initialized for z12 critical zone
 	z12 = 1000000000*(time_4.tv_sec - time_3.tv_sec)+(time_4.tv_nsec - time_3.tv_nsec);
 
@@ -510,18 +520,22 @@ void task2_code()
 		}
     }
 
-	// pthread_mutex_lock(&S23) // decomment this line in order to try to create a deadlock <-----
+	//pthread_mutex_lock(&S14); // decomment this line in order to try to create a deadlock <-----
 	// Critical zone z21
 	// Taking the semaphore
-	pthread_mutex_lock(&S12);
+	pthread_mutex_lock(&S12); // comment this line in order to try to create a deadlock <-----
 	// Getting the time at the beginning of the critical zone
 	clock_gettime(CLOCK_REALTIME, &time_1);
 	// Waste time inside the critical zone
 	double waste;
 	for (int i = 0; i < WATSELOOP; i++)
 	{
-		waste = rand()*rand()%10;
+		//for (int j = 0; j < INNERLOOP; j++) // decomment this line in order to try to create a deadlock <-----
+		//{                                   // decomment this line in order to try to create a deadlock <-----
+			waste = rand()*rand()%10;
+    	//}                                   // decomment this line in order to try to create a deadlock <-----
 	}
+	//pthread_mutex_lock(&S12); // decomment this line in order to try to create a deadlock <-----
 	// Task2 reads from T1T2
 	double due = T1T2;
 	printf(" Read from T1T2: %f ", due);
@@ -530,12 +544,13 @@ void task2_code()
 	clock_gettime(CLOCK_REALTIME, &time_2);
 	// Releasing the semaphore
 	pthread_mutex_unlock(&S12);
+	//pthread_mutex_unlock(&S14); // decomment this line in order to try to create a deadlock <-----
 	// Saving time in the global variable initialized for z11 critical zone
 	z21 = 1000000000*(time_2.tv_sec - time_1.tv_sec)+(time_2.tv_nsec - time_1.tv_nsec);
 
 	// Critical zone z22
 	// Taking the semaphore
-	pthread_mutex_lock(&S23); // comment this line in order to try to create a deadlock <-----
+	pthread_mutex_lock(&S23); 
 	// Getting the time at the beginning of the critical zone
 	clock_gettime(CLOCK_REALTIME, &time_3);
 	// Waste time inside the critical zone
